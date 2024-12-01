@@ -15,7 +15,7 @@ TARGETS:=$(DAYS:%=bin/%)
 
 all: $(TARGETS)
 
-bin/%: %/main.c | $(DIRS)
+bin/%: %/main.c %/input.txt | $(DIRS)
 	$(CC) $(CFLAGS) -MMD -MP $< -o $@ $(LDFLAGS) -D INPUT_LINE_COUNT=$(shell wc -l < $*/input.txt)
 
 $(DAYS): %: bin/%
