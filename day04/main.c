@@ -105,11 +105,12 @@ static u8 check_part2(const char *const input, const i32 x, const i32 y) {
       !bounds_check_down(x, y, 1) || !bounds_check_left(x, y, 1))
     return false;
 
-  AOC_ASSERT(input[y * INPUT_WIDTH_NL + x] == 'A');
-  const char tl = input[(y - 1) * INPUT_WIDTH_NL + (x - 1)];
-  const char tr = input[(y - 1) * INPUT_WIDTH_NL + (x + 1)];
-  const char br = input[(y + 1) * INPUT_WIDTH_NL + (x + 1)];
-  const char bl = input[(y + 1) * INPUT_WIDTH_NL + (x - 1)];
+  const u32 i = y * INPUT_WIDTH_NL + x;
+  AOC_ASSERT(input[i] == 'A');
+  const char tl = input[i + direction_offsets[DIRECTION_UP_LEFT]];
+  const char tr = input[i + direction_offsets[DIRECTION_UP_RIGHT]];
+  const char br = input[i + direction_offsets[DIRECTION_DOWN_RIGHT]];
+  const char bl = input[i + direction_offsets[DIRECTION_DOWN_LEFT]];
   // check if the two diagonals have MS or SM
 #define IS_MS(a, b) ((((a) ^ (b)) ^ ('M' ^ 'S')) == 0)
   return IS_MS(tl, br) && IS_MS(bl, tr);
