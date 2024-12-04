@@ -16,7 +16,9 @@ TARGETS:=$(DAYS:%=bin/%)
 all: $(TARGETS)
 
 bin/%: %/main.c %/input.txt | $(DIRS)
-	$(CC) $(CFLAGS) -MMD -MP $< -o $@ $(LDFLAGS) -D INPUT_LINE_COUNT=$(shell wc -l < $*/input.txt)
+	$(CC) $(CFLAGS) -MMD -MP $< -o $@ $(LDFLAGS) \
+		-D INPUT_HEIGHT=$(shell wc -l < $*/input.txt) \
+		-D INPUT_WIDTH=$(shell wc -L < $*/input.txt | awk '{print $1}')
 
 $(DAYS): %: bin/%
 

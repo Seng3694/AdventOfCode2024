@@ -2,9 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// injected from Makefile using wc -l
-#ifndef INPUT_LINE_COUNT
-#define INPUT_LINE_COUNT 1
+// injected from Makefile
+#ifndef INPUT_HEIGHT
+#define INPUT_HEIGHT 1
 #endif
 
 // awk '{print NF}' day02/input.txt | sort -u | tail -n1
@@ -19,9 +19,9 @@ typedef struct report {
   u8 count;
 } report;
 
-static void read_line(char *line, report reports[INPUT_LINE_COUNT],
+static void read_line(char *line, report reports[INPUT_HEIGHT],
                       const size_t lineNumber) {
-  AOC_ASSERT(INPUT_LINE_COUNT > lineNumber);
+  AOC_ASSERT(INPUT_HEIGHT > lineNumber);
   u8 count = 0;
   while (*line) {
     reports[lineNumber].levels[count++] = strtoul(line, &line, 10);
@@ -58,10 +58,10 @@ static bool is_safe2(const report *const r) {
   return false;
 }
 
-static void solve(const report reports[const INPUT_LINE_COUNT],
-                  u32 *const part1, u32 *const part2) {
+static void solve(const report reports[const INPUT_HEIGHT], u32 *const part1,
+                  u32 *const part2) {
   u32 p1 = 0, p2 = 0;
-  for (u32 i = 0; i < INPUT_LINE_COUNT; ++i) {
+  for (u32 i = 0; i < INPUT_HEIGHT; ++i) {
     if (is_safe(&reports[i])) {
       ++p1;
       ++p2;
@@ -74,7 +74,7 @@ static void solve(const report reports[const INPUT_LINE_COUNT],
 }
 
 int main(void) {
-  report reports[INPUT_LINE_COUNT] = {0};
+  report reports[INPUT_HEIGHT] = {0};
   aoc_file_read_lines2("day02/input.txt", (aoc_line_num_func)read_line,
                        reports);
   u32 part1, part2;
