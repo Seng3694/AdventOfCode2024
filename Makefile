@@ -18,7 +18,8 @@ all: $(TARGETS)
 bin/%: %/main.c %/input.txt | $(DIRS)
 	$(CC) $(CFLAGS) -MMD -MP $< -o $@ $(LDFLAGS) \
 		-D INPUT_HEIGHT=$(shell wc -l < $*/input.txt) \
-		-D INPUT_WIDTH=$(shell wc -L < $*/input.txt | awk '{print $1}')
+		-D INPUT_WIDTH=$(shell wc -L < $*/input.txt | awk '{print $1}') \
+		-D CPU_CORES=$(shell nproc)
 
 $(DAYS): %: bin/%
 
