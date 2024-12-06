@@ -2,14 +2,19 @@
 #include <aoc/mem.h>
 #include <aoc/filesystem.h>
 #include <stdio.h>
+#include <threads.h>
 
-// both injected from the Makefile
+// injected from the Makefile
 #ifndef INPUT_HEIGHT
 #define INPUT_HEIGHT 1
 #endif
 
 #ifndef INPUT_WIDTH
 #define INPUT_WIDTH 1
+#endif
+
+#ifndef CPU_CORES
+#define CPU_CORES 1
 #endif
 
 // with new line for row offsets
@@ -76,7 +81,8 @@ static point get_start_point(const char *const input) {
 #define BOUNDS_CHECK(p)                                                        \
   ((p).x >= 0 && (p).x < INPUT_WIDTH && (p).y >= 0 && (p).y < INPUT_HEIGHT)
 
-static inline void move(const char *const input, guard_data *const gd) {
+static inline void move(const char *const input, const point block,
+                        guard_data *const gd) {
   point new_pos = {
       gd->pos.x + move_offsets[gd->dir].x,
       gd->pos.y + move_offsets[gd->dir].y,
@@ -84,7 +90,8 @@ static inline void move(const char *const input, guard_data *const gd) {
 
   size_t i = new_pos.y * INPUT_WIDTH_NL + new_pos.x;
 
-  while (BOUNDS_CHECK(new_pos) && input[i] == '#') {
+  while (BOUNDS_CHECK(new_pos) &&
+         (input[i] == '#' || (new_pos.x == block.x && new_pos.y == block.y))) {
     gd->dir = (gd->dir + 1) & 3;
     new_pos.x = gd->pos.x + move_offsets[gd->dir].x;
     new_pos.y = gd->pos.y + move_offsets[gd->dir].y;
@@ -95,7 +102,7 @@ static inline void move(const char *const input, guard_data *const gd) {
 }
 
 static bool check_loop(const char *const input, const point start,
-                       const direction start_dir,
+                       const direction start_dir, const point block,
                        aoc_set_guard_data *const loop_set) {
   guard_data gd = {start, start_dir};
   aoc_set_guard_data_clear(loop_set);
@@ -108,63 +115,130 @@ static bool check_loop(const char *const input, const point start,
       return true;
     }
 
-    move(input, &gd);
+    move(input, block, &gd);
   }
 
   return false;
 }
 
-static void solve(char *const input, const point start,
-                  aoc_set_point *const visited, aoc_set_point *const blocks,
-                  aoc_set_guard_data *const loop_set, u32 *const part1,
-                  u32 *const part2) {
+typedef struct move_data {
+  guard_data from;
+  guard_data to;
+} move_data;
+
+#define AOC_T move_data
+#include <aoc/vector.h>
+
+typedef struct thread_data {
+  aoc_set_guard_data loop_set;
+  aoc_set_point *blocks;
+  const aoc_vector_move_data *moves;
+  size_t from;
+  size_t to;
+  mtx_t *mtx;
+  const char *input;
+} thread_data;
+
+static u32 solve_part1(char *const input, const point start,
+                       aoc_set_point *const visited,
+                       aoc_vector_move_data *const moves) {
   guard_data gd = {start, DIRECTION_UP};
   guard_data prev = gd;
 
   // for skipping the starting point for part 2
   aoc_set_point_insert(visited, gd.pos);
-  move(input, &gd);
+  move(input, (point){0xff, 0xff}, &gd);
 
   while (BOUNDS_CHECK(gd.pos)) {
     u32 hash = aoc_point2_u8_hash(&gd.pos);
     if (!aoc_set_point_contains_pre_hashed(visited, gd.pos, hash)) {
       aoc_set_point_insert_pre_hashed(visited, gd.pos, hash);
 
-      const size_t i = gd.pos.y * INPUT_WIDTH_NL + gd.pos.x;
-      input[i] = '#';
-      if (!aoc_set_point_contains(blocks, gd.pos) &&
-          check_loop(input, prev.pos, prev.dir, loop_set)) {
-        aoc_set_point_insert(blocks, gd.pos);
-      }
-      input[i] = '.';
+      // collecting for part 2
+      aoc_vector_move_data_push(moves, (move_data){prev, gd});
     }
 
     prev = gd;
-    move(input, &gd);
+    move(input, (point){0xff, 0xff}, &gd);
   }
 
-  *part1 = visited->count;
-  *part2 = blocks->count;
+  return visited->count;
+}
+
+static i32 run_part2(thread_data *data) {
+  for (size_t i = data->from; i < data->to; ++i) {
+    move_data *const m = &data->moves->items[i];
+
+    mtx_lock(data->mtx);
+    if (!aoc_set_point_contains(data->blocks, m->to.pos)) {
+      mtx_unlock(data->mtx);
+
+      if (check_loop(data->input, m->from.pos, m->from.dir, m->to.pos,
+                     &data->loop_set)) {
+        mtx_lock(data->mtx);
+        aoc_set_point_insert(data->blocks, m->to.pos);
+        mtx_unlock(data->mtx);
+      }
+    } else {
+      mtx_unlock(data->mtx);
+    }
+  }
+
+  return 0;
+}
+
+static u32 solve_part2(const char *const input, aoc_set_point *const blocks,
+                       const aoc_vector_move_data *const moves) {
+  mtx_t mutex = {0};
+  mtx_init(&mutex, mtx_plain);
+
+  const size_t stride = moves->length / CPU_CORES;
+  thread_data data[CPU_CORES] = {0};
+  for (size_t i = 0; i < CPU_CORES; ++i) {
+    data[i].from = i * stride;
+    // due to rounding errors the last core will have slightly more work to do
+    data[i].to = i == (CPU_CORES - 1) ? moves->length : (i + 1) * stride;
+    data[i].mtx = &mutex;
+    data[i].moves = moves;
+    data[i].blocks = blocks;
+    data[i].input = input;
+    aoc_set_guard_data_create(&data[i].loop_set, 1 << 11);
+  }
+
+  thrd_t threads[CPU_CORES] = {0};
+  for (size_t i = 0; i < CPU_CORES; ++i) {
+    thrd_create(&threads[i], (thrd_start_t)run_part2, &data[i]);
+  }
+
+  for (size_t i = 0; i < CPU_CORES; ++i) {
+    int result = 0;
+    thrd_join(threads[i], &result);
+    aoc_set_guard_data_destroy(&data[i].loop_set);
+  }
+
+  mtx_destroy(&mutex);
+  return blocks->count;
 }
 
 int main(void) {
   aoc_set_point visited = {0};
   aoc_set_point blocks = {0};
-  aoc_set_guard_data loop_set = {0};
   aoc_set_point_create(&visited, 1 << 13);
   aoc_set_point_create(&blocks, 1 << 11);
-  aoc_set_guard_data_create(&loop_set, 1 << 11);
 
   char *input = aoc_file_read_all2("day06/input.txt");
   const point start = get_start_point(input);
 
-  u32 part1, part2;
-  solve(input, start, &visited, &blocks, &loop_set, &part1, &part2);
+  aoc_vector_move_data moves = {0};
+  aoc_vector_move_data_create(&moves, 1 << 11);
+
+  const u32 part1 = solve_part1(input, start, &visited, &moves);
+  const u32 part2 = solve_part2(input, &blocks, &moves);
 
   aoc_free(input);
+  aoc_vector_move_data_destroy(&moves);
   aoc_set_point_destroy(&visited);
   aoc_set_point_destroy(&blocks);
-  aoc_set_guard_data_destroy(&loop_set);
 
   printf("%u %u\n", part1, part2);
 }
