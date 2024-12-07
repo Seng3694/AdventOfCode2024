@@ -5,7 +5,7 @@ LDFLAGS:=-lm -laocaux
 BUILD_MODE:=DEBUG
 
 ifdef release
-CFLAGS:=-O2 -Wall -std=c17 -DNDEBUG
+CFLAGS:=-O3 -Wall -std=c17 -DNDEBUG
 BUILD_MODE:=RELEASE
 endif
 
