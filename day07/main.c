@@ -74,12 +74,15 @@ static void parse(char *line, context *const ctx) {
   }
 }
 
-static u64 solve_part1(const context *const ctx) {
-  u64 solution = 0;
+static void solve(const context *const ctx, u64 *const part1,
+                  u64 *const part2) {
+  u64 p1 = 0;
+  u64 p2 = 0;
   for (u16 i = 0; i < ctx->count; ++i) {
     const equation *const eq = &ctx->equations[i];
-    const u32 upper = powf(2, eq->operand_count - 1);
+    u32 upper = powf(2, eq->operand_count - 1);
 
+    // part1
     for (u32 c = 0; c < upper; ++c) {
       u64 result = eq->operands[0];
 
@@ -90,29 +93,21 @@ static u64 solve_part1(const context *const ctx) {
       }
 
       if (result == eq->test_value) {
-        solution += eq->test_value;
+        p1 += eq->test_value;
+        p2 += eq->test_value;
         goto next_equation;
       }
     }
-  next_equation:;
-  }
 
-  return solution;
-}
-
-// could parameterize this function and use it for part 1 as well but bit
-// operations are quite a bit faster than the divisions here
-static u64 solve_part2(const context *const ctx) {
-  u64 solution = 0;
-  for (u16 i = 0; i < ctx->count; ++i) {
-    const equation *const eq = &ctx->equations[i];
-
-    const u32 upper = powf(3, eq->operand_count - 1);
+    // part2
+    upper = powf(3, eq->operand_count - 1);
 
     for (u32 c = 0; c < upper; ++c) {
       u64 result = eq->operands[0];
       u32 temp = c;
 
+      // this goes through the combinations with only + and * again
+      // should optimize it to only use combinations including at least one ||
       for (size_t i = 0; i < eq->operand_count - 1; ++i) {
         const operator op = temp % 3;
 
@@ -123,7 +118,7 @@ static u64 solve_part2(const context *const ctx) {
         case OPERATOR_MULTIPLY:
           result *= eq->operands[i + 1];
           break;
-        default:
+        case OPERATOR_CONCATENATE:
           result = operation_concat(result, eq->operands[i + 1]);
           break;
         }
@@ -131,22 +126,24 @@ static u64 solve_part2(const context *const ctx) {
       }
 
       if (result == eq->test_value) {
-        solution += eq->test_value;
+        p2 += eq->test_value;
         goto next_equation;
       }
     }
+
   next_equation:;
   }
 
-  return solution;
+  *part1 = p1;
+  *part2 = p2;
 }
 
 int main(void) {
   context ctx = {0};
   aoc_file_read_lines1("day07/input.txt", (aoc_line_func)parse, &ctx);
 
-  const u64 part1 = solve_part1(&ctx);
-  const u64 part2 = solve_part2(&ctx);
+  u64 part1 = 0, part2 = 0;
+  solve(&ctx, &part1, &part2);
 
   printf("%lu %lu\n", part1, part2);
 }
